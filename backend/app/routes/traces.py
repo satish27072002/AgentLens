@@ -1,41 +1,44 @@
 """
 POST /api/traces — Receive telemetry data from the SDK.
 
-This is the ingestion endpoint. The SDK sends one TraceCreate payload
-containing an execution and all its LLM/tool calls. We store everything
-in the database in a single transaction.
+MODIFIED for Phase 2: Now requires an API key header (X-API-Key).
+The API key is looked up to find the user_id, which is stored on the execution.
 """
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Execution, LLMCall, ToolCall
+from app.models import User, Execution, LLMCall, ToolCall
 from app.schemas import TraceCreate
+from app.dependencies import get_user_from_api_key
 
 router = APIRouter()
 
 
 @router.post("/api/traces", status_code=201)
-def create_trace(trace: TraceCreate, db: Session = Depends(get_db)):
+def create_trace(
+    trace: TraceCreate,
+    user: User = Depends(get_user_from_api_key),
+    db: Session = Depends(get_db),
+):
     """
     Ingest a complete execution trace from the SDK.
 
-    The SDK sends this when an agent run finishes. It contains:
-    - The execution metadata (agent name, status, cost, duration)
-    - All LLM calls made during the execution
-    - All tool calls made during the execution
+    Requires: X-API-Key header with a valid API key.
 
-    Everything is saved in one database transaction.
+    The API key resolves to a user_id, which is stored on the execution.
+    This is what makes multi-tenancy work — each execution belongs to a user.
     """
-    # Check if execution already exists (idempotency — safe to retry)
+    # Check if execution already exists (idempotency)
     existing = db.query(Execution).filter(Execution.id == trace.id).first()
     if existing:
         raise HTTPException(status_code=409, detail="Execution already exists")
 
-    # Create the execution record
+    # Create the execution record — now with user_id
     execution = Execution(
         id=trace.id,
+        user_id=user.id,
         agent_name=trace.agent_name,
         status=trace.status,
         started_at=trace.started_at,

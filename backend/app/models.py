@@ -1,19 +1,64 @@
 """
 SQLAlchemy models — define the database tables.
 
-Three tables:
-- executions: One row per agent run (the top-level unit)
+Five tables:
+- users: Developer accounts (signup/login)
+- api_keys: API keys for SDK authentication (linked to users)
+- executions: One row per agent run (linked to users via user_id)
 - llm_calls: One row per LLM API call within an execution
 - tool_calls: One row per tool/function call within an execution
-
-Each execution has many llm_calls and tool_calls (one-to-many relationship).
 """
 
-from sqlalchemy import Column, String, Integer, Float, Text, DateTime, ForeignKey, Index
+from sqlalchemy import Column, String, Integer, Float, Text, DateTime, Boolean, ForeignKey, Index
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from app.database import Base
+
+
+class User(Base):
+    """
+    A developer account.
+
+    Users sign up, get API keys, and see only their own execution data.
+    Password is stored as a bcrypt hash — NEVER store plain text passwords.
+    """
+    __tablename__ = "users"
+
+    id = Column(String, primary_key=True)                          # UUID as string
+    email = Column(String, unique=True, nullable=False)
+    password_hash = Column(String, nullable=False)                 # bcrypt hash
+    name = Column(String, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+    # Relationships
+    api_keys = relationship("ApiKey", back_populates="user", cascade="all, delete-orphan")
+    executions = relationship("Execution", back_populates="user")
+
+
+class ApiKey(Base):
+    """
+    An API key for SDK authentication.
+
+    Each user can have multiple keys (e.g., one for dev, one for prod).
+    Keys have an "al_" prefix (like Stripe's "sk_" prefix) so developers
+    can easily identify which service a key belongs to.
+    """
+    __tablename__ = "api_keys"
+
+    id = Column(String, primary_key=True)                          # UUID
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    key_value = Column(String, unique=True, nullable=False)        # e.g. "al_k7x9m2abc..."
+    name = Column(String, default="Default")                       # user-friendly label
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+    user = relationship("User", back_populates="api_keys")
+
+    __table_args__ = (
+        Index("idx_api_keys_key_value", "key_value"),
+        Index("idx_api_keys_user_id", "user_id"),
+    )
 
 
 class Execution(Base):
@@ -22,10 +67,14 @@ class Execution(Base):
 
     Example: A customer support agent handles one user question.
     That's one execution, which might involve 3 LLM calls and 2 tool calls.
+
+    user_id links this execution to the developer who sent it via their API key.
+    This is what makes multi-tenancy work — each query filters by user_id.
     """
     __tablename__ = "executions"
 
     id = Column(String, primary_key=True)                          # UUID as string
+    user_id = Column(String, ForeignKey("users.id"), nullable=True)  # nullable for backward compat
     agent_name = Column(String, nullable=False)                    # e.g. "CustomerSupportAgent"
     status = Column(String, default="running")                     # running | completed | failed
     started_at = Column(DateTime, nullable=False)
@@ -37,13 +86,15 @@ class Execution(Base):
     metadata_json = Column(Text, nullable=True)                    # Extra data as JSON string
     created_at = Column(DateTime, server_default=func.now())
 
-    # Relationships — lets you do execution.llm_calls to get all related calls
+    # Relationships
+    user = relationship("User", back_populates="executions")
     llm_calls = relationship("LLMCall", back_populates="execution", cascade="all, delete-orphan")
     tool_calls = relationship("ToolCall", back_populates="execution", cascade="all, delete-orphan")
 
     __table_args__ = (
         Index("idx_executions_agent_name", "agent_name"),
         Index("idx_executions_started_at", "started_at"),
+        Index("idx_executions_user_id", "user_id"),
     )
 
 

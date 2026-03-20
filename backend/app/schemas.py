@@ -12,7 +12,65 @@ This separation lets you:
 """
 
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
+
+
+# ──────────────────────────────────────────────
+# Auth schemas
+# ──────────────────────────────────────────────
+
+class SignupRequest(BaseModel):
+    """Data needed to create a new account."""
+    email: str
+    password: str
+    name: str | None = None
+
+
+class LoginRequest(BaseModel):
+    """Data needed to log in."""
+    email: str
+    password: str
+
+
+class AuthResponse(BaseModel):
+    """Returned after successful signup or login."""
+    user_id: str
+    token: str
+    api_key: str | None = None  # Only returned on signup (first key auto-created)
+
+
+class UserResponse(BaseModel):
+    """User profile data (returned by GET /api/auth/me)."""
+    id: str
+    email: str
+    name: str | None = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ApiKeyCreate(BaseModel):
+    """Request to generate a new API key."""
+    name: str = "Default"
+
+
+class ApiKeyResponse(BaseModel):
+    """API key as returned in responses (key is masked except on creation)."""
+    id: str
+    name: str
+    key_preview: str  # last 8 chars only, e.g. "...abc12345"
+    is_active: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ApiKeyCreatedResponse(BaseModel):
+    """Returned when a new key is created — shows the FULL key (only time it's visible)."""
+    id: str
+    name: str
+    key: str  # full key — developer must copy it now
+    created_at: datetime
 
 
 # ──────────────────────────────────────────────

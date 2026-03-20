@@ -1,17 +1,17 @@
 """
 GET endpoints for executions — serves data to the frontend dashboard.
 
-Two endpoints:
-- GET /api/executions      — List all executions (paginated, for the table)
-- GET /api/executions/{id} — Get one execution with its LLM/tool calls (for detail page)
+MODIFIED for Phase 2: Now requires JWT auth and filters by user_id.
+Each user only sees their own executions (multi-tenancy).
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
-from app.models import Execution
+from app.models import User, Execution
 from app.schemas import ExecutionListResponse, ExecutionDetailResponse
+from app.dependencies import get_current_user
 
 router = APIRouter()
 
@@ -22,26 +22,23 @@ def list_executions(
     limit: int = Query(20, ge=1, le=100, description="Number of records to return"),
     agent_name: str | None = Query(None, description="Filter by agent name"),
     status: str | None = Query(None, description="Filter by status"),
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
-    List executions with pagination and optional filters.
+    List executions for the current user (paginated).
 
-    Used by the dashboard's execution table.
-    Returns newest first so the most recent runs appear at the top.
+    The key change from Phase 1: we filter by user_id.
+    User A only sees User A's data. This one WHERE clause is multi-tenancy.
     """
-    query = db.query(Execution)
+    query = db.query(Execution).filter(Execution.user_id == user.id)
 
-    # Apply filters if provided
     if agent_name:
         query = query.filter(Execution.agent_name == agent_name)
     if status:
         query = query.filter(Execution.status == status)
 
-    # Get total count (before pagination) for the frontend to show "Page X of Y"
     total = query.count()
-
-    # Get paginated results, newest first
     executions = query.order_by(Execution.started_at.desc()).offset(skip).limit(limit).all()
 
     return ExecutionListResponse(
@@ -53,18 +50,21 @@ def list_executions(
 
 
 @router.get("/api/executions/{execution_id}", response_model=ExecutionDetailResponse)
-def get_execution(execution_id: str, db: Session = Depends(get_db)):
+def get_execution(
+    execution_id: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """
     Get a single execution with all its LLM calls and tool calls.
 
-    Used by the execution detail page.
-    joinedload() tells SQLAlchemy to fetch the related calls in one query
-    instead of making separate queries (N+1 problem prevention).
+    Also filters by user_id — User A can't view User B's execution
+    even if they know the execution ID.
     """
     execution = (
         db.query(Execution)
         .options(joinedload(Execution.llm_calls), joinedload(Execution.tool_calls))
-        .filter(Execution.id == execution_id)
+        .filter(Execution.id == execution_id, Execution.user_id == user.id)
         .first()
     )
 
