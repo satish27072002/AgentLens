@@ -1,0 +1,69 @@
+# DigitalOcean App Platform specification
+# Deploy: doctl apps create --spec .do/app.yaml
+# Or: Import via DigitalOcean Dashboard → Apps → Create App → From GitHub
+#
+# Cost breakdown:
+#   Frontend (static site):  FREE
+#   Backend (basic plan):    $5/mo
+#   Database (dev):          FREE (256MB PostgreSQL)
+#   Total:                   ~$5/mo
+
+name: agentlens
+
+databases:
+  - engine: PG
+    name: db
+    num_nodes: 1
+    size: db-s-dev-database    # FREE dev database (256MB storage)
+    version: "16"
+
+services:
+  - name: backend
+    dockerfile_path: backend/Dockerfile
+    source_dir: backend
+    http_port: 8000
+    instance_count: 1
+    instance_size_slug: basic-xxs    # $5/mo — 512MB RAM, 1 vCPU
+    routes:
+      - path: /api
+      - path: /health
+    envs:
+      # Database — DigitalOcean auto-injects ${db.DATABASE_URL}
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        value: ${db.DATABASE_URL}
+      # Auth0
+      - key: AUTH0_DOMAIN
+        scope: RUN_TIME
+        value: "dev-f40hclgqhiimob42.us.auth0.com"
+      - key: AUTH0_AUDIENCE
+        scope: RUN_TIME
+        value: "https://api.agentlens.dev"
+      # CORS — will be updated after deploy to use actual frontend URL
+      - key: CORS_ORIGINS
+        scope: RUN_TIME
+        value: "${APP_URL},http://localhost:5173"
+
+static_sites:
+  - name: frontend
+    build_command: npm install && npm run build
+    source_dir: frontend
+    output_dir: dist
+    catchall_document: index.html    # SPA — serve index.html for all routes
+    routes:
+      - path: /
+    envs:
+      # These are baked into the JS bundle at build time
+      - key: VITE_AUTH0_DOMAIN
+        scope: BUILD_TIME
+        value: "dev-f40hclgqhiimob42.us.auth0.com"
+      - key: VITE_AUTH0_CLIENT_ID
+        scope: BUILD_TIME
+        value: "u7j28n99TAxPrOpxxVbwtLId6T0ZX6mj"
+      - key: VITE_AUTH0_AUDIENCE
+        scope: BUILD_TIME
+        value: "https://api.agentlens.dev"
+      # Points to the backend service — DigitalOcean routes /api/* to the backend
+      - key: VITE_API_URL
+        scope: BUILD_TIME
+        value: "${APP_URL}"

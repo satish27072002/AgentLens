@@ -1,103 +1,31 @@
 """
-Authentication routes — signup, login, and profile.
+Authentication routes — user profile and first API key.
 
-POST /api/auth/signup  — Create account, get JWT + first API key
-POST /api/auth/login   — Log in, get JWT
-GET  /api/auth/me      — Get current user's profile (requires JWT)
+With Auth0, signup and login happen on Auth0's hosted page.
+The backend only needs:
+- GET /api/auth/me  — Return user profile (auto-creates on first call via JIT provisioning)
+- POST /api/auth/me — Update profile with name/email from Auth0 ID token
+
+The old POST /api/auth/signup and POST /api/auth/login are no longer needed
+because Auth0 handles those flows entirely.
 """
 
-import uuid
-
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import User, ApiKey
-from app.schemas import SignupRequest, LoginRequest, AuthResponse, UserResponse
-from app.auth import hash_password, verify_password, create_jwt_token, generate_api_key
+from app.schemas import UserResponse
 from app.dependencies import get_current_user
 
 router = APIRouter()
 
 
-@router.post("/api/auth/signup", response_model=AuthResponse)
-def signup(request: SignupRequest, db: Session = Depends(get_db)):
-    """
-    Create a new user account.
-
-    Steps:
-    1. Check email isn't already taken
-    2. Hash the password (never store plain text)
-    3. Create the user
-    4. Auto-generate their first API key
-    5. Return a JWT token + the API key
-
-    The API key is shown only once on the onboarding page.
-    The developer must copy it — we never show the full key again.
-    """
-    # Check for existing user
-    existing = db.query(User).filter(User.email == request.email).first()
-    if existing:
-        raise HTTPException(status_code=409, detail="Email already registered")
-
-    # Validate password length
-    if len(request.password) < 8:
-        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
-
-    # Create user
-    user_id = str(uuid.uuid4())
-    user = User(
-        id=user_id,
-        email=request.email,
-        password_hash=hash_password(request.password),
-        name=request.name,
-    )
-    db.add(user)
-
-    # Auto-generate first API key
-    api_key_value = generate_api_key()
-    api_key = ApiKey(
-        id=str(uuid.uuid4()),
-        user_id=user_id,
-        key_value=api_key_value,
-        name="Default",
-    )
-    db.add(api_key)
-    db.commit()
-
-    # Generate JWT token
-    token = create_jwt_token(user_id)
-
-    return AuthResponse(
-        user_id=user_id,
-        token=token,
-        api_key=api_key_value,
-    )
-
-
-@router.post("/api/auth/login", response_model=AuthResponse)
-def login(request: LoginRequest, db: Session = Depends(get_db)):
-    """
-    Log in with email and password.
-
-    Steps:
-    1. Find user by email
-    2. Verify password against stored hash
-    3. Return a JWT token
-    """
-    user = db.query(User).filter(User.email == request.email).first()
-    if not user:
-        raise HTTPException(status_code=401, detail="Invalid email or password")
-
-    if not verify_password(request.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="Invalid email or password")
-
-    token = create_jwt_token(user.id)
-
-    return AuthResponse(
-        user_id=user.id,
-        token=token,
-    )
+class ProfileUpdate(BaseModel):
+    """Optional profile fields from Auth0 ID token (name, email, picture)."""
+    name: str | None = None
+    email: str | None = None
 
 
 @router.get("/api/auth/me", response_model=UserResponse)
@@ -105,7 +33,70 @@ def get_me(user: User = Depends(get_current_user)):
     """
     Get the current user's profile.
 
-    Requires a valid JWT token in the Authorization header.
-    Used by the frontend to check if the user is still logged in.
+    Requires a valid Auth0 JWT in the Authorization header.
+
+    On first call (new user):
+    - The get_current_user dependency auto-creates the user (JIT provisioning)
+    - Auto-generates their first API key
+    - Returns the new user profile
+
+    On subsequent calls:
+    - Simply returns the existing user profile
     """
     return user
+
+
+@router.post("/api/auth/me", response_model=UserResponse)
+def update_me(
+    profile: ProfileUpdate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Update the user's profile with data from Auth0 ID token.
+
+    The access token doesn't include name/email, but the frontend has
+    that info from the ID token. This endpoint lets the frontend sync it.
+    Only updates fields that are provided and different from current values.
+    """
+    updated = False
+
+    if profile.name and profile.name != user.name:
+        user.name = profile.name
+        updated = True
+
+    if profile.email and not user.email.endswith("@auth0.user") and profile.email != user.email:
+        # Don't overwrite a real email with Auth0's
+        pass
+    elif profile.email and user.email.endswith("@auth0.user"):
+        user.email = profile.email
+        updated = True
+
+    if updated:
+        db.commit()
+        db.refresh(user)
+
+    return user
+
+
+@router.get("/api/auth/api-key")
+def get_first_api_key(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Get the user's first API key (for onboarding).
+
+    After Auth0 login, the frontend redirects to /onboarding.
+    This endpoint returns the full API key so the user can copy it.
+    Only returns the FIRST active key — used for initial setup display.
+    """
+    api_key = db.query(ApiKey).filter(
+        ApiKey.user_id == user.id,
+        ApiKey.is_active == True,
+    ).first()
+
+    if not api_key:
+        return {"api_key": None}
+
+    return {"api_key": api_key.key_value}

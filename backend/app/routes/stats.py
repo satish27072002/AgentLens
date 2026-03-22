@@ -12,7 +12,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import User, Execution
+from app.models import User, Execution, LLMCall
 from app.schemas import StatsResponse
 from app.dependencies import get_current_user
 
@@ -41,19 +41,26 @@ def get_stats(
         Execution.user_id == user.id
     ).scalar() or 0.0
 
+    completed_count = base_query.filter(Execution.status == "completed").count()
     if total_executions > 0:
-        completed_count = base_query.filter(Execution.status == "completed").count()
         success_rate = (completed_count / total_executions) * 100
     else:
         success_rate = 0.0
+
+    # Count total LLM calls across this user's executions
+    total_llm_calls = db.query(func.count(LLMCall.id)).join(Execution).filter(
+        Execution.user_id == user.id
+    ).scalar() or 0
 
     today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
     executions_today = base_query.filter(Execution.started_at >= today_start).count()
 
     return StatsResponse(
         total_executions=total_executions,
+        successful_executions=completed_count,
         total_cost=round(total_cost, 4),
         avg_duration_ms=round(avg_duration, 1),
         success_rate=round(success_rate, 1),
+        total_llm_calls=total_llm_calls,
         executions_today=executions_today,
     )

@@ -20,14 +20,18 @@ class User(Base):
     """
     A developer account.
 
-    Users sign up, get API keys, and see only their own execution data.
-    Password is stored as a bcrypt hash — NEVER store plain text passwords.
+    Users authenticate via Auth0 (OAuth2/OIDC). No passwords stored locally.
+    The auth0_sub field links the Auth0 identity to this local user record.
+
+    On first login, the backend auto-creates a User row using the Auth0 profile.
+    API keys are generated for SDK authentication (separate from Auth0).
     """
     __tablename__ = "users"
 
     id = Column(String, primary_key=True)                          # UUID as string
     email = Column(String, unique=True, nullable=False)
-    password_hash = Column(String, nullable=False)                 # bcrypt hash
+    password_hash = Column(String, nullable=True)                  # Nullable — Auth0 users don't have local passwords
+    auth0_sub = Column(String, unique=True, nullable=True)         # Auth0 user ID, e.g. "auth0|abc123"
     name = Column(String, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
 

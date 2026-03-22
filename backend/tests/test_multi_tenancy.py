@@ -2,28 +2,45 @@
 Tests for multi-tenancy — the most important security property.
 
 Verifies: User A can NEVER see User B's data, even if they know the execution ID.
+
+With Auth0, we use mock tokens for two different users:
+- User A: "fake-auth0-token-for-tests" → auth0_sub = "auth0|test123"
+- User B: "fake-auth0-token-user-2"    → auth0_sub = "auth0|user2"
 """
 
+import uuid
+from app.models import User, ApiKey
+from app.auth import generate_api_key
 
-def test_users_see_only_their_own_data(client):
+
+def _create_user_with_key(db_session, email, auth0_sub):
+    """Helper to create a user with an API key."""
+    user_id = str(uuid.uuid4())
+    api_key_value = generate_api_key()
+
+    user = User(id=user_id, email=email, auth0_sub=auth0_sub, name=email.split("@")[0])
+    db_session.add(user)
+
+    api_key = ApiKey(
+        id=str(uuid.uuid4()),
+        user_id=user_id,
+        key_value=api_key_value,
+        name="Default",
+    )
+    db_session.add(api_key)
+    db_session.commit()
+
+    return user, api_key_value
+
+
+def test_users_see_only_their_own_data(client, db_session):
     """User A's executions should be invisible to User B."""
-    # Create User A
-    resp_a = client.post("/api/auth/signup", json={
-        "email": "alice@example.com",
-        "password": "alicepass123",
-        "name": "Alice",
-    })
-    token_a = resp_a.json()["token"]
-    api_key_a = resp_a.json()["api_key"]
+    # Create two users
+    user_a, api_key_a = _create_user_with_key(db_session, "alice@example.com", "auth0|test123")
+    user_b, api_key_b = _create_user_with_key(db_session, "bob@example.com", "auth0|user2")
 
-    # Create User B
-    resp_b = client.post("/api/auth/signup", json={
-        "email": "bob@example.com",
-        "password": "bobpass123",
-        "name": "Bob",
-    })
-    token_b = resp_b.json()["token"]
-    api_key_b = resp_b.json()["api_key"]
+    token_a = "fake-auth0-token-for-tests"
+    token_b = "fake-auth0-token-user-2"
 
     # User A sends a trace
     client.post("/api/traces", json={
@@ -64,17 +81,12 @@ def test_users_see_only_their_own_data(client):
     assert bob_stats["total_cost"] == 0.05
 
 
-def test_user_cannot_access_other_users_execution(client):
+def test_user_cannot_access_other_users_execution(client, db_session):
     """User A should get 404 when trying to access User B's execution by ID."""
-    # Create two users
-    resp_a = client.post("/api/auth/signup", json={
-        "email": "alice2@example.com", "password": "alicepass123",
-    })
-    resp_b = client.post("/api/auth/signup", json={
-        "email": "bob2@example.com", "password": "bobpass123",
-    })
-    token_a = resp_a.json()["token"]
-    api_key_b = resp_b.json()["api_key"]
+    user_a, _ = _create_user_with_key(db_session, "alice2@example.com", "auth0|test123")
+    user_b, api_key_b = _create_user_with_key(db_session, "bob2@example.com", "auth0|user2")
+
+    token_a = "fake-auth0-token-for-tests"
 
     # User B sends a trace
     client.post("/api/traces", json={

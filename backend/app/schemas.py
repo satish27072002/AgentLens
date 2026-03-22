@@ -12,7 +12,7 @@ This separation lets you:
 """
 
 from datetime import datetime
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 
 
 # ──────────────────────────────────────────────
@@ -184,7 +184,9 @@ class ExecutionListResponse(BaseModel):
 class StatsResponse(BaseModel):
     """Dashboard summary statistics."""
     total_executions: int
+    successful_executions: int = 0
     total_cost: float
     avg_duration_ms: float
     success_rate: float
+    total_llm_calls: int = 0
     executions_today: int

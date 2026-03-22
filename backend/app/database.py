@@ -12,13 +12,22 @@ from sqlalchemy.orm import sessionmaker, DeclarativeBase
 
 from app.config import DATABASE_URL
 
+# Normalize connection string:
+# Cloud providers (DigitalOcean, Azure, Neon) often give "postgresql://..."
+# but SQLAlchemy 2.x needs "postgresql+psycopg2://..." for the psycopg2 driver.
+_db_url = DATABASE_URL
+if _db_url.startswith("postgres://"):
+    _db_url = _db_url.replace("postgres://", "postgresql+psycopg2://", 1)
+elif _db_url.startswith("postgresql://") and "+psycopg2" not in _db_url:
+    _db_url = _db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
+
 # For SQLite, we need check_same_thread=False to allow FastAPI's async to work.
 # PostgreSQL doesn't need this, so we only add it for SQLite.
 connect_args = {}
-if DATABASE_URL.startswith("sqlite"):
+if _db_url.startswith("sqlite"):
     connect_args["check_same_thread"] = False
 
-engine = create_engine(DATABASE_URL, connect_args=connect_args)
+engine = create_engine(_db_url, connect_args=connect_args)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

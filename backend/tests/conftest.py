@@ -3,13 +3,20 @@ Pytest configuration — shared test fixtures.
 
 Provides:
 - db_session: Fresh in-memory database for each test
-- client: FastAPI TestClient wired to the test database
-- auth_headers: JWT token headers for a pre-created test user
+- client: FastAPI TestClient wired to the test database + mocked Auth0
+- auth_headers: Auth0 JWT headers for a pre-created test user
 - api_key_headers: API key headers for SDK endpoints
 - test_user: A pre-created user for tests that need one
+
+Auth0 mocking:
+In tests, we mock verify_auth0_token() to skip the real Auth0 call.
+Instead, it returns a fake payload with the test user's auth0_sub.
+This lets all tests run without internet access or Auth0 credentials.
 """
 
 import uuid
+from unittest.mock import patch
+
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -19,7 +26,7 @@ from fastapi.testclient import TestClient
 from app.database import Base, get_db
 from app.main import app
 from app.models import User, ApiKey
-from app.auth import hash_password, create_jwt_token, generate_api_key
+from app.auth import generate_api_key
 
 
 engine = create_engine(
@@ -28,6 +35,34 @@ engine = create_engine(
     poolclass=StaticPool,
 )
 TestSession = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+# Fake Auth0 sub for test users
+TEST_AUTH0_SUB = "auth0|test123"
+TEST_AUTH0_TOKEN = "fake-auth0-token-for-tests"
+
+
+def _mock_verify_auth0_token(token: str) -> dict:
+    """
+    Mock Auth0 token verification for tests.
+
+    Returns a fake payload as if Auth0 had verified the token.
+    The 'sub' matches the test user's auth0_sub.
+    """
+    if token == TEST_AUTH0_TOKEN:
+        return {
+            "sub": TEST_AUTH0_SUB,
+            "email": "test@example.com",
+            "name": "Test User",
+        }
+    # For multi-tenancy tests — a second user
+    if token == "fake-auth0-token-user-2":
+        return {
+            "sub": "auth0|user2",
+            "email": "user2@example.com",
+            "name": "User Two",
+        }
+    from app.auth0 import Auth0Error
+    raise Auth0Error("Invalid test token")
 
 
 @pytest.fixture
@@ -44,7 +79,7 @@ def db_session():
 
 @pytest.fixture
 def client(db_session):
-    """FastAPI TestClient using the test database."""
+    """FastAPI TestClient using the test database + mocked Auth0."""
     def override_get_db():
         try:
             yield db_session
@@ -52,8 +87,12 @@ def client(db_session):
             pass
 
     app.dependency_overrides[get_db] = override_get_db
-    with TestClient(app) as c:
-        yield c
+
+    # Mock Auth0 verification so tests don't need real Auth0 tokens
+    with patch("app.dependencies.verify_auth0_token", side_effect=_mock_verify_auth0_token):
+        with TestClient(app) as c:
+            yield c
+
     app.dependency_overrides.clear()
 
 
@@ -66,7 +105,7 @@ def test_user(db_session):
     user = User(
         id=user_id,
         email="test@example.com",
-        password_hash=hash_password("testpass123"),
+        auth0_sub=TEST_AUTH0_SUB,
         name="Test User",
     )
     db_session.add(user)
@@ -84,11 +123,9 @@ def test_user(db_session):
 
 
 @pytest.fixture
-def auth_headers(test_user):
-    """JWT Authorization headers for the test user."""
-    user, _ = test_user
-    token = create_jwt_token(user.id)
-    return {"Authorization": f"Bearer {token}"}
+def auth_headers():
+    """Auth0 JWT Authorization headers for the test user."""
+    return {"Authorization": f"Bearer {TEST_AUTH0_TOKEN}"}
 
 
 @pytest.fixture
