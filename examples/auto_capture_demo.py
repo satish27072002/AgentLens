@@ -7,40 +7,28 @@ Shows the "2 lines of code" experience:
 
 Run:
     1. Start backend: cd backend && uvicorn app.main:app --reload
-    2. Set your OpenAI key: export OPENAI_API_KEY=sk-...
+    2. Set your keys:
+         export AGENTLENS_API_KEY=al_your_key_here
+         export OPENAI_API_KEY=sk-...
     3. Run this: python examples/auto_capture_demo.py
 
+Get your AgentLens API key from the Settings page after logging in.
 If you don't have an OpenAI API key, use examples/auto_capture_simulated.py instead.
 """
 
 import os
+import sys
 import time
 from agentlens import AgentLens
 
-# Get API key from environment or use the demo user's key
+# Get API key from environment
 API_KEY = os.getenv("AGENTLENS_API_KEY", "")
 if not API_KEY:
-    print("No AGENTLENS_API_KEY set. Creating demo user...")
-    import httpx
-    r = httpx.post("http://localhost:8000/api/auth/signup", json={
-        "email": "autocapture@demo.com",
-        "password": "demo1234",
-        "name": "Auto Capture Demo",
-    })
-    if r.status_code == 200:
-        API_KEY = r.json()["api_key"]
-    elif r.status_code == 409:
-        r = httpx.post("http://localhost:8000/api/auth/login", json={
-            "email": "autocapture@demo.com",
-            "password": "demo1234",
-        })
-        # Generate a new key
-        token = r.json()["token"]
-        kr = httpx.post("http://localhost:8000/api/keys",
-                        json={"name": "auto-demo"},
-                        headers={"Authorization": f"Bearer {token}"})
-        API_KEY = kr.json()["key"]
-    print(f"Using API key: {API_KEY[:12]}...")
+    print("Error: AGENTLENS_API_KEY not set.")
+    print("  1. Log into the AgentLens dashboard")
+    print("  2. Go to Settings → Create API Key")
+    print("  3. Run: export AGENTLENS_API_KEY=al_your_key_here")
+    sys.exit(1)
 
 # ════════════════════════════════════════════
 #  THIS IS ALL THE DEVELOPER NEEDS TO ADD:
@@ -81,5 +69,4 @@ print("\nWaiting for background sender to flush (3 seconds)...")
 time.sleep(3)
 AgentLens.shutdown()
 
-print("\nDone! Check your dashboard:")
-print("  curl -s http://localhost:8000/api/executions | python -m json.tool")
+print("\nDone! Check your AgentLens dashboard at http://localhost:5173")

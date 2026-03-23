@@ -4,17 +4,27 @@ AgentLens Backend — FastAPI application entry point.
 This file:
 1. Creates the FastAPI app
 2. Adds CORS middleware (so the React frontend can call the API)
-3. Creates database tables on startup
-4. Includes all route modules (auth, keys, traces, executions, stats)
-5. Provides a /health endpoint for quick checks
+3. Adds request logging middleware (correlation IDs, structured logs)
+4. Creates database tables on startup
+5. Includes all route modules (auth, keys, traces, executions, stats)
+6. Provides a /health endpoint for quick checks
 """
 
+import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import CORS_ORIGINS
 from app.database import engine, Base
 from app.routes import auth_routes, keys, traces, executions, stats
+from app.middleware.request_logging import RequestLoggingMiddleware
+
+# Configure structured logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(name)s %(levelname)s %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 
 # Create the FastAPI application
 app = FastAPI(
@@ -23,7 +33,8 @@ app = FastAPI(
     version="0.2.0",
 )
 
-# CORS middleware — allows the frontend (running on a different port) to call this API.
+# Middleware (order matters — first added = outermost)
+app.add_middleware(RequestLoggingMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,

@@ -1,48 +1,37 @@
 """
-Example: Auto-Capture with Simulated OpenAI (NO API key needed)
+Example: Auto-Capture with Simulated OpenAI (NO OpenAI API key needed)
 
-Demonstrates how monkey-patching works by creating a mock OpenAI client
-that returns fake responses. The patching mechanism is the same as with
-the real OpenAI library.
+Demonstrates how monkey-patching works by using the manual recorder
+to simulate auto-captured events. No external API keys required.
 
 Run:
     1. Start backend: cd backend && uvicorn app.main:app --reload
-    2. Run this: python examples/auto_capture_simulated.py
+    2. Set your AgentLens key: export AGENTLENS_API_KEY=al_your_key_here
+    3. Run this: python examples/auto_capture_simulated.py
+
+Get your AgentLens API key from the Settings page after logging in.
 """
 
 import os
+import sys
 import time
-import httpx
 from agentlens import AgentLens
 
-# Setup: create/login demo user
-print("Setting up demo user...")
-BASE_URL = "http://localhost:8000"
-r = httpx.post(f"{BASE_URL}/api/auth/signup", json={
-    "email": "simulated@demo.com",
-    "password": "demo1234",
-    "name": "Simulated Demo",
-})
-if r.status_code == 200:
-    API_KEY = r.json()["api_key"]
-    TOKEN = r.json()["token"]
-elif r.status_code == 409:
-    r = httpx.post(f"{BASE_URL}/api/auth/login", json={
-        "email": "simulated@demo.com", "password": "demo1234",
-    })
-    TOKEN = r.json()["token"]
-    kr = httpx.post(f"{BASE_URL}/api/keys", json={"name": "sim-demo"},
-                    headers={"Authorization": f"Bearer {TOKEN}"})
-    API_KEY = kr.json()["key"]
+# Get API key from environment
+API_KEY = os.getenv("AGENTLENS_API_KEY", "")
+if not API_KEY:
+    print("Error: AGENTLENS_API_KEY not set.")
+    print("  1. Log into the AgentLens dashboard")
+    print("  2. Go to Settings → Create API Key")
+    print("  3. Run: export AGENTLENS_API_KEY=al_your_key_here")
+    sys.exit(1)
 
-print(f"API Key: {API_KEY[:12]}...")
+BASE_URL = os.getenv("AGENTLENS_ENDPOINT", "http://localhost:8000")
 
 # Initialize auto-capture with fast flush for demo
 AgentLens.init(api_key=API_KEY, endpoint=BASE_URL, flush_interval=2)
 
-# ── Simulate what happens when openai is installed and patched ──
-# We'll use the manual recorder directly to simulate auto-captured events
-
+# Use the manual recorder to simulate auto-captured events
 recorder = AgentLens._recorder
 
 print("\nSimulating auto-captured LLM calls...\n")
@@ -102,12 +91,4 @@ print("\nWaiting for background sender to flush (3 seconds)...")
 time.sleep(3)
 AgentLens.shutdown()
 
-# Verify data arrived
-print("\nVerifying data in backend...")
-stats = httpx.get(f"{BASE_URL}/api/stats",
-                  headers={"Authorization": f"Bearer {TOKEN}"}).json()
-print(f"  Total executions: {stats['total_executions']}")
-print(f"  Total cost: ${stats['total_cost']:.4f}")
-print(f"  Success rate: {stats['success_rate']}%")
-
-print("\nDone! Auto-capture pipeline working.")
+print("\nDone! Check your AgentLens dashboard at http://localhost:5173")

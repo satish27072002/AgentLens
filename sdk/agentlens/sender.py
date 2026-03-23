@@ -11,11 +11,15 @@ Critical design decisions:
 - Groups events by execution_id before sending (backend expects one execution per request)
 """
 
+import sys
 import uuid
 import atexit
+import logging
 import threading
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
+
+logger = logging.getLogger("agentlens")
 
 import httpx
 
@@ -60,9 +64,9 @@ class BackgroundSender:
 
     def _run(self):
         """Main loop — sleep, then flush."""
+        stop_event = threading.Event()
         while self._running:
-            self._thread_event = threading.Event()
-            self._thread_event.wait(timeout=self._flush_interval)
+            stop_event.wait(timeout=self._flush_interval)
             if self._running:
                 self._flush()
 
@@ -147,9 +151,16 @@ class BackgroundSender:
         }
 
         try:
-            self._client.post(f"{self._endpoint}/api/traces", json=payload)
-        except Exception:
-            pass  # NEVER crash the developer's code
+            resp = self._client.post(f"{self._endpoint}/api/traces", json=payload)
+            if resp.status_code >= 400:
+                logger.warning(
+                    "AgentLens: failed to send trace (HTTP %d): %s",
+                    resp.status_code,
+                    resp.text[:200],
+                )
+        except Exception as exc:
+            # Log but NEVER crash the developer's code
+            logger.debug("AgentLens: failed to send trace: %s", exc)
 
     def _final_flush(self):
         """Called at program exit — send any remaining events."""

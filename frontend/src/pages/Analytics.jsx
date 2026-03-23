@@ -17,8 +17,10 @@ export default function Analytics() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.getExecutions({ limit: 100 })
-      .then((data) => setExecutions(data.executions || []))
+    api.getExecutions({ limit: 500 })
+      .then((data) => {
+        setExecutions(data.executions || []);
+      })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);

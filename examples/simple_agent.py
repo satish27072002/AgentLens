@@ -1,20 +1,35 @@
 """
-Example 1: Simple Agent (no API keys needed)
+Example 1: Simple Agent (no external API keys needed)
 
 Simulates an agent that makes LLM calls and tool calls.
 Shows the basic SDK usage pattern.
 
 Run:
     1. Start backend: cd backend && uvicorn app.main:app --reload
-    2. Run this:      python examples/simple_agent.py
-    3. Check data:    curl http://localhost:8000/api/stats
+    2. Set your key:  export AGENTLENS_API_KEY=al_your_key_here
+    3. Run this:      python examples/simple_agent.py
+
+Get your AgentLens API key from the Settings page after logging in.
 """
 
+import os
+import sys
 import time
 from agentlens import AgentLens
 
+# Get API key from environment
+API_KEY = os.getenv("AGENTLENS_API_KEY", "")
+if not API_KEY:
+    print("Error: AGENTLENS_API_KEY not set.")
+    print("  1. Log into the AgentLens dashboard")
+    print("  2. Go to Settings → Create API Key")
+    print("  3. Run: export AGENTLENS_API_KEY=al_your_key_here")
+    sys.exit(1)
+
+ENDPOINT = os.getenv("AGENTLENS_ENDPOINT", "http://localhost:8000")
+
 # Connect to the backend
-lens = AgentLens(endpoint="http://localhost:8000", silent=False)
+lens = AgentLens(api_key=API_KEY, endpoint=ENDPOINT, silent=False)
 
 print("Running simple agent with AgentLens tracing...\n")
 
@@ -55,7 +70,7 @@ with lens.trace("SimpleAgent") as trace:
     )
     print("  Logged LLM call: gpt-4o-mini (with context)")
 
-print("✅ Execution 1 sent successfully!\n")
+print("Execution 1 sent successfully!\n")
 
 # ─── Execution 2: Failed agent run ───
 print("Running a failing agent...")
@@ -72,7 +87,7 @@ try:
         # Simulate an error
         raise ValueError("API returned unexpected format")
 except ValueError:
-    print("❌ Execution 2 failed (error captured in trace)\n")
+    print("Execution 2 failed (error captured in trace)\n")
 
 # ─── Execution 3: Manual error marking ───
 with lens.trace("SimpleAgent", metadata={"version": "1.2", "environment": "staging"}) as trace:
@@ -86,8 +101,6 @@ with lens.trace("SimpleAgent", metadata={"version": "1.2", "environment": "stagi
     )
     # Mark as failed without raising an exception
     trace.set_error("LLM returned empty response after 3 retries")
-    print("⚠️  Execution 3 marked as failed manually\n")
+    print("Execution 3 marked as failed manually\n")
 
-print("Done! Check your data:")
-print("  Stats:      http://localhost:8000/api/stats")
-print("  Executions: http://localhost:8000/api/executions")
+print("Done! Check your dashboard at http://localhost:5173")

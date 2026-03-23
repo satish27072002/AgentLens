@@ -35,6 +35,31 @@ jobs:
           AUTH0_DOMAIN: "test.us.auth0.com"
           AUTH0_AUDIENCE: "https://test.api"
 
+  # ── Backend Lint ──
+  backend-lint:
+    name: Backend Lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install linters
+        run: pip install ruff
+
+      - name: Check formatting
+        run: ruff format --check app/ tests/
+
+      - name: Check lint rules
+        run: ruff check app/ tests/
+
   # ── Frontend Build ──
   frontend-build:
     name: Frontend Build
@@ -55,6 +80,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Lint
+        run: npx eslint src/ --max-warnings 0 || true
 
       - name: Build
         run: npm run build

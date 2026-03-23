@@ -1,5 +1,5 @@
 """
-Example 2: Multi-Step Research Agent (no API keys needed)
+Example 2: Multi-Step Research Agent (no external API keys needed)
 
 Simulates a research agent that:
 1. Takes a user question
@@ -11,21 +11,37 @@ Shows how a real multi-step agent would use the SDK.
 
 Run:
     1. Start backend: cd backend && uvicorn app.main:app --reload
-    2. Run this:      python examples/multi_step_agent.py
+    2. Set your key:  export AGENTLENS_API_KEY=al_your_key_here
+    3. Run this:      python examples/multi_step_agent.py
+
+Get your AgentLens API key from the Settings page after logging in.
 """
 
+import os
+import sys
 import time
 import random
 from agentlens import AgentLens
 
-lens = AgentLens(endpoint="http://localhost:8000", silent=False)
+# Get API key from environment
+API_KEY = os.getenv("AGENTLENS_API_KEY", "")
+if not API_KEY:
+    print("Error: AGENTLENS_API_KEY not set.")
+    print("  1. Log into the AgentLens dashboard")
+    print("  2. Go to Settings → Create API Key")
+    print("  3. Run: export AGENTLENS_API_KEY=al_your_key_here")
+    sys.exit(1)
+
+ENDPOINT = os.getenv("AGENTLENS_ENDPOINT", "http://localhost:8000")
+
+lens = AgentLens(api_key=API_KEY, endpoint=ENDPOINT, silent=False)
 
 
 def simulate_research(query: str):
     """Simulate a multi-step research agent."""
 
     with lens.trace("ResearchAgent", metadata={"query": query}) as trace:
-        print(f"\n📖 Research Agent | Query: '{query}'")
+        print(f"\nResearch Agent | Query: '{query}'")
         print(f"   Execution ID: {trace.execution_id}")
 
         # Step 1: Plan the research approach
@@ -83,7 +99,7 @@ def simulate_research(query: str):
         )
         print("   Step 5: Fact-checked with Claude")
 
-    print("   ✅ Research complete!")
+    print("   Research complete!")
 
 
 # Run several research queries
@@ -99,5 +115,5 @@ print("=" * 50)
 for query in queries:
     simulate_research(query)
 
-print(f"\nDone! {len(queries)} research traces sent to AgentLens.")
-print("Check: http://localhost:8000/api/executions")
+print(f"\nDone! {len(queries)} research traces sent.")
+print("Check your dashboard at http://localhost:5173")

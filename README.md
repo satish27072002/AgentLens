@@ -4,8 +4,6 @@
 
 AgentLens automatically captures all OpenAI and Anthropic API calls from your AI agent and displays them on a real-time dashboard with cost tracking, performance metrics, and execution traces.
 
-<!-- screenshot -->
-
 ---
 
 ## Features
@@ -16,7 +14,8 @@ AgentLens automatically captures all OpenAI and Anthropic API calls from your AI
 - **Execution traces** -- Full request/response capture with token counts, latency, and model metadata.
 - **Multi-tenant isolation** -- Row-level filtering ensures each user sees only their own data.
 - **Dual auth** -- Auth0 JWT for the dashboard (Google + GitHub social login), API keys for the SDK.
-- **Analytics dashboard** -- Five pages: Login, Dashboard, Execution Detail, Analytics, and Settings.
+- **Analytics dashboard** -- Six pages: Login, Onboarding, Dashboard, Execution Detail, Analytics, and Settings.
+- **Structured logging** -- Request correlation IDs and JSON-structured logs for every API call.
 
 ---
 
@@ -32,7 +31,7 @@ Create an account on the AgentLens dashboard and copy your API key from the Sett
 pip install agentlens
 ```
 
-### 3. Initialize in your agent code
+### 3. Initialize in your agent code (2 lines)
 
 ```python
 from agentlens import AgentLens
@@ -59,17 +58,54 @@ All LLM calls are automatically captured and sent to your AgentLens dashboard.
 ## Architecture
 
 ```
-[Developer's Agent Code]
-        |
-[AgentLens SDK] --- monkey-patches OpenAI/Anthropic clients
-        |
-[Background Sender Thread] --- flushes every 5s, non-blocking
-        |
-[FastAPI Backend] --- validates API key, resolves user_id
-        |
-[SQLite (dev) / PostgreSQL (prod)] --- executions, llm_calls, tool_calls
-        |
-[React Dashboard] --- stats, execution list, analytics charts
+                    ┌─────────────────────────────┐
+                    │   Developer's Agent Code     │
+                    │   (OpenAI / Anthropic calls)  │
+                    └──────────┬──────────────────┘
+                               │
+                    ┌──────────▼──────────────────┐
+                    │      AgentLens SDK           │
+                    │  ┌────────────────────────┐  │
+                    │  │  Monkey-Patcher        │  │
+                    │  │  (OpenAI + Anthropic)   │  │
+                    │  └──────────┬─────────────┘  │
+                    │  ┌──────────▼─────────────┐  │
+                    │  │  Event Recorder        │  │
+                    │  │  (thread-safe buffer)   │  │
+                    │  └──────────┬─────────────┘  │
+                    │  ┌──────────▼─────────────┐  │
+                    │  │  Background Sender     │  │
+                    │  │  (flush every 5s)       │  │
+                    │  └──────────┬─────────────┘  │
+                    └─────────────┼────────────────┘
+                                  │ POST /api/traces
+                                  │ (X-API-Key auth)
+                    ┌─────────────▼────────────────┐
+                    │     FastAPI Backend           │
+                    │  ┌─────────────────────────┐  │
+                    │  │  Request Logging        │  │
+                    │  │  (correlation IDs)       │  │
+                    │  ├─────────────────────────┤  │
+                    │  │  Auth: Auth0 JWT (web)  │  │
+                    │  │  Auth: API Key (SDK)    │  │
+                    │  ├─────────────────────────┤  │
+                    │  │  Routes: traces, stats, │  │
+                    │  │  executions, keys, auth │  │
+                    │  └──────────┬──────────────┘  │
+                    └─────────────┼─────────────────┘
+                                  │
+                    ┌─────────────▼────────────────┐
+                    │  SQLite (dev) / PostgreSQL    │
+                    │  Tables: users, executions,   │
+                    │  llm_calls, tool_calls, keys  │
+                    └──────────────────────────────┘
+                                  │
+                    ┌─────────────▼────────────────┐
+                    │     React Dashboard           │
+                    │  Auth0 (Google + GitHub)       │
+                    │  Pages: Dashboard, Analytics,  │
+                    │  Execution Detail, Settings    │
+                    └──────────────────────────────┘
 ```
 
 **Auth flow:**
@@ -81,13 +117,15 @@ All LLM calls are automatically captured and sent to your AgentLens dashboard.
 
 ## Tech Stack
 
-| Layer    | Technology                                      |
-|----------|------------------------------------------------|
-| Backend  | FastAPI, SQLAlchemy, SQLite (dev), PostgreSQL (prod) |
-| Frontend | React 18, Vite, TailwindCSS v4, Recharts, React Router |
-| Auth     | Auth0 (Google + GitHub social login)            |
-| SDK      | Python, monkey-patching, background sender thread |
-| Testing  | pytest (30 passing tests)                       |
+| Layer      | Technology                                            |
+|------------|-------------------------------------------------------|
+| Backend    | FastAPI, SQLAlchemy, SQLite (dev), PostgreSQL (prod)  |
+| Frontend   | React 19, Vite, TailwindCSS v4, Recharts             |
+| Auth       | Auth0 (Google + GitHub social login), API keys (SDK)  |
+| SDK        | Python, monkey-patching, background sender thread     |
+| CI/CD      | GitHub Actions (tests, lint, build)                   |
+| Deploy     | DigitalOcean App Platform (Docker)                    |
+| Testing    | pytest (30 tests), multi-tenancy isolation tests      |
 
 ---
 
@@ -98,30 +136,37 @@ All LLM calls are automatically captured and sent to your AgentLens dashboard.
 - Python 3.12+
 - Node.js 18+
 
-### Backend
+### Option 1: Docker Compose (recommended)
 
 ```bash
+cp backend/.env.example backend/.env
+cp frontend/.env.example frontend/.env
+# Edit .env files with your Auth0 credentials
+
+docker compose up -d --build
+```
+
+Backend: `http://localhost:8000` | Frontend: `http://localhost:5173`
+
+### Option 2: Manual
+
+```bash
+# Backend
 cd backend
 pip install -r requirements.txt
 uvicorn app.main:app --reload
-```
 
-The API server starts at `http://localhost:8000`.
-
-### Frontend
-
-```bash
+# Frontend (separate terminal)
 cd frontend
 npm install
 npm run dev
 ```
 
-The dashboard starts at `http://localhost:5173`.
-
 ### Seed Data
 
 ```bash
-python backend/scripts/seed_data.py
+export AGENTLENS_API_KEY=al_your_key_here
+python examples/simple_agent.py
 ```
 
 ---
@@ -129,10 +174,11 @@ python backend/scripts/seed_data.py
 ## Running Tests
 
 ```bash
-PYTHONPATH=backend pytest backend/tests/ -v
+cd backend
+pytest -v
 ```
 
-All 30 tests cover authentication, multi-tenancy, API key management, execution ingestion, and stats endpoints.
+All 30 tests cover authentication, multi-tenancy, API key management, trace ingestion, and stats endpoints.
 
 ---
 
@@ -142,44 +188,61 @@ All 30 tests cover authentication, multi-tenancy, API key management, execution 
 agentlens/
 ├── backend/                  # FastAPI application
 │   ├── app/
-│   │   ├── main.py           # Application entrypoint and middleware
-│   │   ├── models.py         # SQLAlchemy models (User, Execution, LLMCall, ToolCall, APIKey)
+│   │   ├── main.py           # App entrypoint, middleware
+│   │   ├── models.py         # SQLAlchemy models
 │   │   ├── schemas.py        # Pydantic request/response schemas
-│   │   ├── database.py       # Database engine and session management
-│   │   ├── config.py         # Application settings
-│   │   ├── auth0.py          # Auth0 JWT verification
+│   │   ├── config.py         # Environment-based settings
+│   │   ├── auth0.py          # Auth0 JWT verification (RS256)
 │   │   ├── dependencies.py   # FastAPI dependency injection
-│   │   └── routes/
-│   │       ├── auth_routes.py    # Auth0 callback, user provisioning
-│   │       ├── executions.py     # Execution CRUD and trace ingestion
-│   │       ├── keys.py           # API key management
-│   │       ├── stats.py          # Dashboard statistics
-│   │       └── traces.py         # Trace data endpoints
-│   ├── tests/                # pytest test suite (30 tests)
-│   ├── scripts/              # Seed data and utilities
-│   └── requirements.txt
+│   │   ├── middleware/        # Request logging, correlation IDs
+│   │   └── routes/            # auth, executions, keys, stats, traces
+│   ├── tests/                # 30 pytest tests
+│   ├── scripts/              # Seed data utilities
+│   └── Dockerfile
 ├── frontend/                 # React + Vite dashboard
 │   └── src/
 │       ├── pages/            # Login, Dashboard, ExecutionPage, Analytics, Settings, Onboarding
 │       ├── components/       # StatCard, ExecutionTable, Layout, ProtectedRoute
 │       ├── context/          # AuthContext (Auth0 integration)
-│       ├── App.jsx           # Router configuration
-│       └── main.jsx          # Application entry
+│       └── api/              # API client with JWT auth
 ├── sdk/                      # Python SDK package
 │   └── agentlens/
-│       ├── __init__.py       # Public API (AgentLens.init)
-│       ├── client.py         # Core client and monkey-patching logic
-│       ├── recorder.py       # Call recording and data capture
-│       ├── sender.py         # Background thread for async data transmission
+│       ├── client.py         # Core client + monkey-patching
+│       ├── recorder.py       # Thread-safe event recording
+│       ├── sender.py         # Background sender with error logging
 │       ├── pricing.py        # Per-model cost calculations
-│       └── trace.py          # Trace context management
-├── examples/                 # Demo scripts
-│   ├── simple_agent.py
-│   ├── multi_step_agent.py
-│   ├── auto_capture_demo.py
-│   └── auto_capture_simulated.py
-└── README.md
+│       └── patchers/         # OpenAI + Anthropic auto-capture
+├── examples/                 # Demo scripts (no external API keys needed)
+├── .github/workflows/        # CI: tests, lint, build
+├── .do/                      # DigitalOcean App Platform config
+├── docker-compose.yml        # Local dev (PostgreSQL + backend + frontend)
+└── DEPLOYMENT.md             # Production deployment guide
 ```
+
+---
+
+## Examples
+
+Run example agents to populate your dashboard with sample data:
+
+```bash
+export AGENTLENS_API_KEY=al_your_key_here
+
+# Simple agent (3 executions with LLM + tool calls)
+python examples/simple_agent.py
+
+# Multi-step research agent (3 research queries)
+python examples/multi_step_agent.py
+
+# Simulated auto-capture (no OpenAI key needed)
+python examples/auto_capture_simulated.py
+```
+
+---
+
+## Deployment
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for DigitalOcean App Platform deployment instructions (~$5/mo).
 
 ---
 
