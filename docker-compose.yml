@@ -1,0 +1,61 @@
+# ─── AgentLens — Local Development ───
+# Start everything: docker compose up -d --build
+# View logs:       docker compose logs -f
+# Stop:            docker compose down
+# Reset DB:        docker compose down -v
+
+services:
+  # PostgreSQL database
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: agentlens
+      POSTGRES_USER: agentlens
+      POSTGRES_PASSWORD: agentlens
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agentlens"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # FastAPI backend
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+psycopg2://agentlens:agentlens@db:5432/agentlens
+      CORS_ORIGINS: http://localhost:5173,http://localhost:3000
+      AUTH0_DOMAIN: ${AUTH0_DOMAIN:-dev-f40hclgqhiimob42.us.auth0.com}
+      AUTH0_AUDIENCE: ${AUTH0_AUDIENCE:-https://api.agentlens.dev}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Vite dev server (frontend)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_AUTH0_DOMAIN: ${VITE_AUTH0_DOMAIN:-dev-f40hclgqhiimob42.us.auth0.com}
+      VITE_AUTH0_CLIENT_ID: ${VITE_AUTH0_CLIENT_ID:-u7j28n99TAxPrOpxxVbwtLId6T0ZX6mj}
+      VITE_AUTH0_AUDIENCE: ${VITE_AUTH0_AUDIENCE:-https://api.agentlens.dev}
+      VITE_API_URL: http://localhost:8000
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:

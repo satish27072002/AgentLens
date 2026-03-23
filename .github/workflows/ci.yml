@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ── Backend Tests ──
+  backend-test:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run tests
+        run: pytest -v --tb=short
+        env:
+          DATABASE_URL: "sqlite:///./test.db"
+          AUTH0_DOMAIN: "test.us.auth0.com"
+          AUTH0_AUDIENCE: "https://test.api"
+
+  # ── Frontend Build ──
+  frontend-build:
+    name: Frontend Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+        env:
+          VITE_AUTH0_DOMAIN: "test.us.auth0.com"
+          VITE_AUTH0_CLIENT_ID: "test-client-id"
+          VITE_AUTH0_AUDIENCE: "https://test.api"
+          VITE_API_URL: "http://localhost:8000"
+
+      - name: Verify build output
+        run: ls -la dist/index.html
+
+  # ── SDK Validation ──
+  sdk-check:
+    name: SDK Check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdk
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install SDK
+        run: pip install -e .
+
+      - name: Verify import
+        run: python -c "from agentlens import AgentLens; print('SDK import OK')"

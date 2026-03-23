@@ -36,5 +36,9 @@ Thumbs.db
 .coverage
 htmlcov/
 
-# Node (frontend - future)
+# Node
 node_modules/
+dist/
+
+# Build artifacts
+*.egg-info/
