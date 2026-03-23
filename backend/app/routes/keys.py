@@ -88,10 +88,14 @@ def delete_api_key(
     We don't actually delete it (so existing data references stay valid).
     We just set is_active=False, which means the SDK can no longer use it.
     """
-    api_key = db.query(ApiKey).filter(
-        ApiKey.id == key_id,
-        ApiKey.user_id == user.id,
-    ).first()
+    api_key = (
+        db.query(ApiKey)
+        .filter(
+            ApiKey.id == key_id,
+            ApiKey.user_id == user.id,
+        )
+        .first()
+    )
 
     if not api_key:
         raise HTTPException(status_code=404, detail="API key not found")

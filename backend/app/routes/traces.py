@@ -53,30 +53,34 @@ def create_trace(
 
     # Create LLM call records
     for llm_call in trace.llm_calls:
-        db.add(LLMCall(
-            id=llm_call.id,
-            execution_id=trace.id,
-            provider=llm_call.provider,
-            model=llm_call.model,
-            prompt_tokens=llm_call.prompt_tokens,
-            completion_tokens=llm_call.completion_tokens,
-            total_tokens=llm_call.total_tokens,
-            cost=llm_call.cost,
-            duration_ms=llm_call.duration_ms,
-            timestamp=llm_call.timestamp,
-        ))
+        db.add(
+            LLMCall(
+                id=llm_call.id,
+                execution_id=trace.id,
+                provider=llm_call.provider,
+                model=llm_call.model,
+                prompt_tokens=llm_call.prompt_tokens,
+                completion_tokens=llm_call.completion_tokens,
+                total_tokens=llm_call.total_tokens,
+                cost=llm_call.cost,
+                duration_ms=llm_call.duration_ms,
+                timestamp=llm_call.timestamp,
+            )
+        )
 
     # Create tool call records
     for tool_call in trace.tool_calls:
-        db.add(ToolCall(
-            id=tool_call.id,
-            execution_id=trace.id,
-            tool_name=tool_call.tool_name,
-            duration_ms=tool_call.duration_ms,
-            status=tool_call.status,
-            error_message=tool_call.error_message,
-            timestamp=tool_call.timestamp,
-        ))
+        db.add(
+            ToolCall(
+                id=tool_call.id,
+                execution_id=trace.id,
+                tool_name=tool_call.tool_name,
+                duration_ms=tool_call.duration_ms,
+                status=tool_call.status,
+                error_message=tool_call.error_message,
+                timestamp=tool_call.timestamp,
+            )
+        )
 
     db.commit()
 

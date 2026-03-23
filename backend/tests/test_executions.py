@@ -1,35 +1,41 @@
 """Tests for GET /api/executions — now requires JWT auth + filters by user."""
 
 
-def _post_trace(client, api_key_headers, exec_id, agent_name="TestAgent", status="completed"):
+def _post_trace(
+    client, api_key_headers, exec_id, agent_name="TestAgent", status="completed"
+):
     """Helper to create a trace for testing."""
-    client.post("/api/traces", json={
-        "id": exec_id,
-        "agent_name": agent_name,
-        "status": status,
-        "started_at": "2026-03-20T10:00:00",
-        "duration_ms": 3000,
-        "total_cost": 0.002,
-        "total_tokens": 300,
-        "llm_calls": [
-            {
-                "id": f"{exec_id}-llm",
-                "provider": "openai",
-                "model": "gpt-4o-mini",
-                "total_tokens": 300,
-                "cost": 0.002,
-                "duration_ms": 1000,
-            }
-        ],
-        "tool_calls": [
-            {
-                "id": f"{exec_id}-tool",
-                "tool_name": "calculator",
-                "duration_ms": 50,
-                "status": "success",
-            }
-        ],
-    }, headers=api_key_headers)
+    client.post(
+        "/api/traces",
+        json={
+            "id": exec_id,
+            "agent_name": agent_name,
+            "status": status,
+            "started_at": "2026-03-20T10:00:00",
+            "duration_ms": 3000,
+            "total_cost": 0.002,
+            "total_tokens": 300,
+            "llm_calls": [
+                {
+                    "id": f"{exec_id}-llm",
+                    "provider": "openai",
+                    "model": "gpt-4o-mini",
+                    "total_tokens": 300,
+                    "cost": 0.002,
+                    "duration_ms": 1000,
+                }
+            ],
+            "tool_calls": [
+                {
+                    "id": f"{exec_id}-tool",
+                    "tool_name": "calculator",
+                    "duration_ms": 50,
+                    "status": "success",
+                }
+            ],
+        },
+        headers=api_key_headers,
+    )
 
 
 def test_list_executions_empty(client, auth_headers):

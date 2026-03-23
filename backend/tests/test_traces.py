@@ -1,6 +1,5 @@
 """Tests for POST /api/traces — now requires API key auth."""
 
-
 SAMPLE_TRACE = {
     "id": "test-exec-001",
     "agent_name": "TestAgent",
@@ -52,7 +51,9 @@ def test_create_trace_no_api_key(client):
 
 def test_create_trace_invalid_api_key(client):
     """Posting with an invalid API key should return 401."""
-    response = client.post("/api/traces", json=SAMPLE_TRACE, headers={"X-API-Key": "fake_key"})
+    response = client.post(
+        "/api/traces", json=SAMPLE_TRACE, headers={"X-API-Key": "fake_key"}
+    )
     assert response.status_code == 401
 
 

@@ -39,7 +39,9 @@ def list_executions(
         query = query.filter(Execution.status == status)
 
     total = query.count()
-    executions = query.order_by(Execution.started_at.desc()).offset(skip).limit(limit).all()
+    executions = (
+        query.order_by(Execution.started_at.desc()).offset(skip).limit(limit).all()
+    )
 
     return ExecutionListResponse(
         executions=executions,

@@ -38,7 +38,9 @@ def test_get_me_no_token(client):
 
 def test_get_me_invalid_token(client):
     """GET /api/auth/me with bad token should return 401."""
-    response = client.get("/api/auth/me", headers={"Authorization": "Bearer invalid.token.here"})
+    response = client.get(
+        "/api/auth/me", headers={"Authorization": "Bearer invalid.token.here"}
+    )
     assert response.status_code == 401
 
 
@@ -53,8 +55,6 @@ def test_get_first_api_key(client, test_user, auth_headers):
 
 def test_jit_creates_api_key(client, auth_headers, db_session):
     """JIT provisioning should auto-create an API key for new users."""
-    from app.models import ApiKey
-
     # First call — triggers JIT
     client.get("/api/auth/me", headers=auth_headers)
 

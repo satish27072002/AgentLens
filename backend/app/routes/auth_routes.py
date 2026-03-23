@@ -24,6 +24,7 @@ router = APIRouter()
 
 class ProfileUpdate(BaseModel):
     """Optional profile fields from Auth0 ID token (name, email, picture)."""
+
     name: str | None = None
     email: str | None = None
 
@@ -65,7 +66,11 @@ def update_me(
         user.name = profile.name
         updated = True
 
-    if profile.email and not user.email.endswith("@auth0.user") and profile.email != user.email:
+    if (
+        profile.email
+        and not user.email.endswith("@auth0.user")
+        and profile.email != user.email
+    ):
         # Don't overwrite a real email with Auth0's
         pass
     elif profile.email and user.email.endswith("@auth0.user"):
@@ -91,10 +96,14 @@ def get_first_api_key(
     This endpoint returns the full API key so the user can copy it.
     Only returns the FIRST active key — used for initial setup display.
     """
-    api_key = db.query(ApiKey).filter(
-        ApiKey.user_id == user.id,
-        ApiKey.is_active == True,
-    ).first()
+    api_key = (
+        db.query(ApiKey)
+        .filter(
+            ApiKey.user_id == user.id,
+            ApiKey.is_active.is_(True),
+        )
+        .first()
+    )
 
     if not api_key:
         return {"api_key": None}

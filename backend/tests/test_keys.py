@@ -3,7 +3,9 @@
 
 def test_create_api_key(client, auth_headers):
     """Creating a key should return the full key (only time it's shown)."""
-    response = client.post("/api/keys", json={"name": "Production"}, headers=auth_headers)
+    response = client.post(
+        "/api/keys", json={"name": "Production"}, headers=auth_headers
+    )
     assert response.status_code == 201
     data = response.json()
     assert data["key"].startswith("al_")
@@ -23,7 +25,9 @@ def test_list_api_keys(client, auth_headers):
 def test_delete_api_key(client, auth_headers, test_user):
     """Deleting a key should deactivate it."""
     # Create a key to delete
-    create_resp = client.post("/api/keys", json={"name": "ToDelete"}, headers=auth_headers)
+    create_resp = client.post(
+        "/api/keys", json={"name": "ToDelete"}, headers=auth_headers
+    )
     key_id = create_resp.json()["id"]
 
     # Delete it

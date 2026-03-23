@@ -32,14 +32,16 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         except Exception as exc:
             duration_ms = (time.perf_counter() - start_time) * 1000
             logger.error(
-                json.dumps({
-                    "event": "request_error",
-                    "request_id": request_id,
-                    "method": request.method,
-                    "path": request.url.path,
-                    "duration_ms": round(duration_ms, 1),
-                    "error": str(exc),
-                })
+                json.dumps(
+                    {
+                        "event": "request_error",
+                        "request_id": request_id,
+                        "method": request.method,
+                        "path": request.url.path,
+                        "duration_ms": round(duration_ms, 1),
+                        "error": str(exc),
+                    }
+                )
             )
             raise
 

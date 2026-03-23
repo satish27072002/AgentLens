@@ -62,6 +62,7 @@ def _mock_verify_auth0_token(token: str) -> dict:
             "name": "User Two",
         }
     from app.auth0 import Auth0Error
+
     raise Auth0Error("Invalid test token")
 
 
@@ -80,6 +81,7 @@ def db_session():
 @pytest.fixture
 def client(db_session):
     """FastAPI TestClient using the test database + mocked Auth0."""
+
     def override_get_db():
         try:
             yield db_session
@@ -89,7 +91,9 @@ def client(db_session):
     app.dependency_overrides[get_db] = override_get_db
 
     # Mock Auth0 verification so tests don't need real Auth0 tokens
-    with patch("app.dependencies.verify_auth0_token", side_effect=_mock_verify_auth0_token):
+    with patch(
+        "app.dependencies.verify_auth0_token", side_effect=_mock_verify_auth0_token
+    ):
         with TestClient(app) as c:
             yield c
 

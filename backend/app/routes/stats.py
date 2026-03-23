@@ -33,13 +33,19 @@ def get_stats(
 
     total_executions = base_query.count()
 
-    total_cost = db.query(func.sum(Execution.total_cost)).filter(
-        Execution.user_id == user.id
-    ).scalar() or 0.0
+    total_cost = (
+        db.query(func.sum(Execution.total_cost))
+        .filter(Execution.user_id == user.id)
+        .scalar()
+        or 0.0
+    )
 
-    avg_duration = db.query(func.avg(Execution.duration_ms)).filter(
-        Execution.user_id == user.id
-    ).scalar() or 0.0
+    avg_duration = (
+        db.query(func.avg(Execution.duration_ms))
+        .filter(Execution.user_id == user.id)
+        .scalar()
+        or 0.0
+    )
 
     completed_count = base_query.filter(Execution.status == "completed").count()
     if total_executions > 0:
@@ -48,11 +54,17 @@ def get_stats(
         success_rate = 0.0
 
     # Count total LLM calls across this user's executions
-    total_llm_calls = db.query(func.count(LLMCall.id)).join(Execution).filter(
-        Execution.user_id == user.id
-    ).scalar() or 0
+    total_llm_calls = (
+        db.query(func.count(LLMCall.id))
+        .join(Execution)
+        .filter(Execution.user_id == user.id)
+        .scalar()
+        or 0
+    )
 
-    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    today_start = datetime.now(timezone.utc).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
     executions_today = base_query.filter(Execution.started_at >= today_start).count()
 
     return StatsResponse(

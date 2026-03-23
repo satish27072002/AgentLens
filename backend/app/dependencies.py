@@ -99,10 +99,14 @@ def get_user_from_api_key(
 
     This is UNCHANGED — API key auth is completely separate from Auth0.
     """
-    api_key = db.query(ApiKey).filter(
-        ApiKey.key_value == x_api_key,
-        ApiKey.is_active == True,
-    ).first()
+    api_key = (
+        db.query(ApiKey)
+        .filter(
+            ApiKey.key_value == x_api_key,
+            ApiKey.is_active.is_(True),
+        )
+        .first()
+    )
 
     if not api_key:
         raise HTTPException(status_code=401, detail="Invalid or inactive API key")

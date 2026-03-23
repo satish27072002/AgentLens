@@ -22,11 +22,12 @@ import jwt
 import httpx
 from functools import lru_cache
 
-from app.config import AUTH0_DOMAIN, AUTH0_AUDIENCE, AUTH0_ISSUER, AUTH0_JWKS_URL
+from app.config import AUTH0_AUDIENCE, AUTH0_ISSUER, AUTH0_JWKS_URL
 
 
 class Auth0Error(Exception):
     """Raised when Auth0 token verification fails."""
+
     pass
 
 
@@ -72,7 +73,9 @@ def _get_signing_key(token: str) -> dict:
         if key["kid"] == unverified_header.get("kid"):
             return key
 
-    raise Auth0Error("Unable to find signing key — Auth0 key rotation may be in progress")
+    raise Auth0Error(
+        "Unable to find signing key — Auth0 key rotation may be in progress"
+    )
 
 
 def verify_auth0_token(token: str) -> dict:
